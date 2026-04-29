@@ -19,8 +19,9 @@ ENV/
 # Environment / secrets
 .env
 
-# Streamlit cache
+# Streamlit cache (but keep config.toml for deployment)
 .streamlit/
+!.streamlit/config.toml
 
 # IDE
 .vscode/

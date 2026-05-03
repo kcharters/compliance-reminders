@@ -35,8 +35,13 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    /* Sidebar */
-    [data-testid="stSidebar"] { background: #111111; }
+    /* Sidebar – adapts to light and dark themes */
+    [data-testid="stSidebar"] {
+        background: var(--background-color, transparent);
+    }
+    [data-testid="stSidebar"] * {
+        color: var(--text-color, inherit) !important;
+    }
 
     /* Metric cards */
     .card {

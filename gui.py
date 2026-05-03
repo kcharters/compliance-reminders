@@ -119,6 +119,45 @@ def would_fire(reminder: dict, sim_date: date) -> bool:
     return 0 <= dr and dr in reminder["days_before"]
 
 
+def send_reminder_email(reminder: dict, days: int) -> tuple[bool, str]:
+    """Render and send a reminder email. Returns (success, message)."""
+    env_live = dotenv_values(ENV_FILE) if ENV_FILE.exists() else {}
+    smtp_user = env_live.get("EMAIL_USER", "")
+    smtp_pass = env_live.get("EMAIL_PASSWORD", "")
+    smtp_host = env_live.get("EMAIL_HOST", "smtp.gmail.com")
+    smtp_port = int(env_live.get("EMAIL_PORT", "587"))
+    smtp_from = env_live.get("EMAIL_FROM", smtp_user)
+    if not smtp_user or not smtp_pass:
+        return False, "SMTP credentials not configured. Go to ⚙️ Settings."
+    try:
+        dl = date.fromisoformat(reminder["deadline"])
+        html = render(
+            reminder["template"],
+            {
+                "reminder_name": reminder["name"],
+                "days_remaining": max(days, 0),
+                "deadline": dl.strftime("%d %B %Y"),
+            },
+        )
+        subject = (
+            f"⚠️ Reminder: {reminder['name']} – "
+            f"{max(days, 0)} day{'s' if days != 1 else ''} remaining"
+        )
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = smtp_from
+        msg["To"] = ", ".join(reminder["recipients"])
+        msg.attach(MIMEText(html, "html"))
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.sendmail(smtp_from, reminder["recipients"], msg.as_string())
+        return True, f"Sent to {', '.join(reminder['recipients'])}"
+    except Exception as exc:
+        return False, str(exc)
+
+
 def render_email_preview(reminder: dict) -> str:
     dr = days_remaining(reminder)
     dl = date.fromisoformat(reminder["deadline"])
@@ -215,6 +254,12 @@ if page == "📊 Dashboard":
                 progress = urgency_progress(dr)
                 color = "#ef4444" if dr <= 7 else "#f59e0b" if dr <= 30 else "#10b981"
                 st.progress(progress, text=f"{max(dr, 0)} days remaining")
+                if st.button("📤 Send Now", key=f"force_{reminder['id']}", help="Force-send this reminder email now"):
+                    ok, msg = send_reminder_email(reminder, dr)
+                    if ok:
+                        st.success(f"✅ {msg}")
+                    else:
+                        st.warning(f"⚠️ {msg}")
 
 
 # ── DRY RUN ──────────────────────────────────────────────────────────────────
@@ -252,7 +297,12 @@ elif page == "🔍 Dry Run":
                 st.caption(f"Recipients: {', '.join(reminder['recipients'])}")
             with c2:
                 if fires:
-                    st.success("✅ Email queued")
+                    if st.button("📤 Send Now", key=f"dryrun_send_{reminder['id']}"):
+                        ok, msg = send_reminder_email(reminder, dr_sim)
+                        if ok:
+                            st.success(f"✅ {msg}")
+                        else:
+                            st.warning(f"⚠️ {msg}")
                 else:
                     st.info("Skipped")
 
@@ -291,31 +341,12 @@ elif page == "📧 Email Preview":
         except Exception as e:
             st.error(f"Failed to render template: {e}")
 
-    if col_send.button("📤 Send Test Email", use_container_width=True):
-        env_live = dotenv_values(ENV_FILE) if ENV_FILE.exists() else {}
-        smtp_user = env_live.get("EMAIL_USER", "")
-        smtp_pass = env_live.get("EMAIL_PASSWORD", "")
-        smtp_host = env_live.get("EMAIL_HOST", "smtp.gmail.com")
-        smtp_port = int(env_live.get("EMAIL_PORT", "587"))
-        smtp_from = env_live.get("EMAIL_FROM", smtp_user)
-        if not smtp_user or not smtp_pass:
-            st.warning("⚙️ Configure SMTP credentials in Settings before sending a test email.")
+    if col_send.button("📤 Send Now", use_container_width=True):
+        ok, msg_out = send_reminder_email(reminder, days_remaining(reminder))
+        if ok:
+            st.success(f"✅ {msg_out}")
         else:
-            try:
-                html = render_email_preview(reminder)
-                msg = MIMEMultipart("alternative")
-                msg["Subject"] = f"[TEST] {reminder['name']}"
-                msg["From"] = smtp_from
-                msg["To"] = ", ".join(reminder["recipients"])
-                msg.attach(MIMEText(html, "html"))
-                with smtplib.SMTP(smtp_host, smtp_port) as server:
-                    server.ehlo()
-                    server.starttls()
-                    server.login(smtp_user, smtp_pass)
-                    server.sendmail(smtp_from, reminder["recipients"], msg.as_string())
-                st.success(f"✅ Test email sent to {', '.join(reminder['recipients'])}")
-            except Exception as e:
-                st.error(f"Failed to send: {e}")
+            st.warning(f"⚠️ {msg_out}")
 
 
 # ── SETTINGS ─────────────────────────────────────────────────────────────────

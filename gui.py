@@ -2,8 +2,11 @@
 
 import json
 import os
+import smtplib
 import sys
 from datetime import date, datetime, timedelta
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from pathlib import Path
 
 import streamlit as st
@@ -13,8 +16,10 @@ from dotenv import dotenv_values, set_key
 ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT))
 
-from reminders.definitions import REMINDERS  # noqa: E402
+from reminders.definitions import load_reminders, save_reminders  # noqa: E402
 from reminders.renderer import render  # noqa: E402
+
+REMINDERS = load_reminders()
 
 # ── Page config ─────────────────────────────────────────────────────────────
 
@@ -135,7 +140,7 @@ with st.sidebar:
 
     page = st.radio(
         "Navigation",
-        ["📊 Dashboard", "🔍 Dry Run", "📧 Email Preview", "⚙️ Settings"],
+        ["📊 Dashboard", "🔍 Dry Run", "📧 Email Preview", "⚙️ Settings", "📋 Manage Reminders"],
         label_visibility="collapsed",
     )
 
@@ -276,13 +281,41 @@ elif page == "📧 Email Preview":
         f"**Template:** `{reminder['template']}`"
     )
 
-    if st.button("Render Email"):
+    col_render, col_send = st.columns(2)
+
+    if col_render.button("👁️ Render Email", use_container_width=True):
         try:
             html = render_email_preview(reminder)
             st.markdown("#### Preview")
             st.components.v1.html(html, height=500, scrolling=True)
         except Exception as e:
             st.error(f"Failed to render template: {e}")
+
+    if col_send.button("📤 Send Test Email", use_container_width=True):
+        env_live = dotenv_values(ENV_FILE) if ENV_FILE.exists() else {}
+        smtp_user = env_live.get("EMAIL_USER", "")
+        smtp_pass = env_live.get("EMAIL_PASSWORD", "")
+        smtp_host = env_live.get("EMAIL_HOST", "smtp.gmail.com")
+        smtp_port = int(env_live.get("EMAIL_PORT", "587"))
+        smtp_from = env_live.get("EMAIL_FROM", smtp_user)
+        if not smtp_user or not smtp_pass:
+            st.warning("⚙️ Configure SMTP credentials in Settings before sending a test email.")
+        else:
+            try:
+                html = render_email_preview(reminder)
+                msg = MIMEMultipart("alternative")
+                msg["Subject"] = f"[TEST] {reminder['name']}"
+                msg["From"] = smtp_from
+                msg["To"] = ", ".join(reminder["recipients"])
+                msg.attach(MIMEText(html, "html"))
+                with smtplib.SMTP(smtp_host, smtp_port) as server:
+                    server.ehlo()
+                    server.starttls()
+                    server.login(smtp_user, smtp_pass)
+                    server.sendmail(smtp_from, reminder["recipients"], msg.as_string())
+                st.success(f"✅ Test email sent to {', '.join(reminder['recipients'])}")
+            except Exception as e:
+                st.error(f"Failed to send: {e}")
 
 
 # ── SETTINGS ─────────────────────────────────────────────────────────────────
@@ -348,3 +381,86 @@ elif page == "⚙️ Settings":
                     "template": r["template"],
                 }
             )
+
+
+# ── MANAGE REMINDERS ─────────────────────────────────────────────────────────
+elif page == "📋 Manage Reminders":
+    st.title("Manage Reminders")
+    st.caption("Add or remove compliance reminders. Changes are saved immediately to `reminders/reminders.json`.")
+
+    _TEMPLATES = sorted(p.name for p in (ROOT / "templates").glob("*.html"))
+
+    st.markdown("---")
+    st.subheader("Current Reminders")
+
+    header_cols = st.columns([3, 2, 2, 1])
+    header_cols[0].markdown("**Name**")
+    header_cols[1].markdown("**Deadline**")
+    header_cols[2].markdown("**Status**")
+    header_cols[3].markdown("**Action**")
+    st.divider()
+
+    for r in REMINDERS:
+        dr = days_remaining(r)
+        pill = urgency_pill_class(dr)
+        label = urgency_label(dr)
+        deadline_str = date.fromisoformat(r["deadline"]).strftime("%d %b %Y")
+        row = st.columns([3, 2, 2, 1])
+        row[0].markdown(f"**{r['name']}**  \n`{r['id']}`")
+        row[1].markdown(deadline_str)
+        row[2].markdown(f"<span class='{pill}'>{label}</span>", unsafe_allow_html=True)
+        if row[3].button("🗑️", key=f"del_{r['id']}", help=f"Delete {r['name']}"):
+            updated = [x for x in REMINDERS if x["id"] != r["id"]]
+            save_reminders(updated)
+            st.success(f"Deleted **{r['name']}**")
+            st.rerun()
+        st.divider()
+
+    st.markdown("---")
+    st.subheader("Add New Reminder")
+
+    with st.form("add_reminder_form"):
+        c1, c2 = st.columns(2)
+        new_name = c1.text_input("Name", placeholder="e.g. HIPAA Risk Assessment")
+        new_deadline = c2.date_input("Deadline", value=date.today() + timedelta(days=30))
+
+        c3, c4 = st.columns(2)
+        new_recipients = c3.text_area("Recipients (one per line)", placeholder="compliance@example.com\naudit@example.com")
+        new_days_before = c4.text_input("Lead times – days before deadline (comma-separated)", value="30, 14, 7, 1")
+
+        c5, c6, c7 = st.columns(3)
+        new_template = c5.selectbox("Email Template", _TEMPLATES)
+        new_hour = c6.number_input("Schedule Hour (0–23)", min_value=0, max_value=23, value=8)
+        new_minute = c7.number_input("Schedule Minute (0–59)", min_value=0, max_value=59, value=0)
+
+        submitted = st.form_submit_button("➕ Add Reminder", type="primary")
+
+    if submitted:
+        if not new_name.strip() or not new_recipients.strip():
+            st.error("Name and at least one recipient are required.")
+        else:
+            try:
+                days = [int(d.strip()) for d in new_days_before.split(",") if d.strip()]
+                if not days:
+                    raise ValueError("At least one lead time is required.")
+                recipients = [addr.strip() for addr in new_recipients.strip().splitlines() if addr.strip()]
+                new_id = new_name.strip().lower().replace(" ", "_").replace("-", "_")
+                existing_ids = {r["id"] for r in REMINDERS}
+                base_id, n = new_id, 2
+                while new_id in existing_ids:
+                    new_id = f"{base_id}_{n}"
+                    n += 1
+                new_reminder = {
+                    "id": new_id,
+                    "name": new_name.strip(),
+                    "recipients": recipients,
+                    "schedule": {"hour": int(new_hour), "minute": int(new_minute)},
+                    "days_before": sorted(days, reverse=True),
+                    "deadline": new_deadline.isoformat(),
+                    "template": new_template,
+                }
+                save_reminders(REMINDERS + [new_reminder])
+                st.success(f"✅ Added **{new_name.strip()}**")
+                st.rerun()
+            except ValueError as e:
+                st.error(f"Invalid input: {e}")

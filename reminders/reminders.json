@@ -1,0 +1,56 @@
+[
+  {
+    "id": "pci_dss_scan",
+    "name": "PCI-DSS Quarterly Scan",
+    "recipients": ["security@example.com", "compliance@example.com"],
+    "schedule": {"hour": 8, "minute": 0},
+    "days_before": [14, 7, 3, 1],
+    "deadline": "2026-04-28",
+    "template": "gdpr_review.html"
+  },
+  {
+    "id": "soc2_evidence",
+    "name": "SOC 2 Evidence Collection",
+    "recipients": ["audit@example.com"],
+    "schedule": {"hour": 9, "minute": 0},
+    "days_before": [30, 14, 7, 3],
+    "deadline": "2026-05-07",
+    "template": "iso_audit.html"
+  },
+  {
+    "id": "gdpr_annual_review",
+    "name": "GDPR Annual Review",
+    "recipients": ["dpo@example.com", "legal@example.com"],
+    "schedule": {"hour": 8, "minute": 0},
+    "days_before": [30, 14, 7, 1],
+    "deadline": "2026-05-31",
+    "template": "gdpr_review.html"
+  },
+  {
+    "id": "iso27001_audit",
+    "name": "ISO 27001 Internal Audit",
+    "recipients": ["infosec@example.com"],
+    "schedule": {"hour": 9, "minute": 0},
+    "days_before": [60, 30, 7],
+    "deadline": "2026-06-15",
+    "template": "iso_audit.html"
+  },
+  {
+    "id": "policy_renewal",
+    "name": "Acceptable Use Policy Renewal",
+    "recipients": ["hr@example.com", "it@example.com"],
+    "schedule": {"hour": 8, "minute": 30},
+    "days_before": [14, 7, 3, 1],
+    "deadline": "2026-07-01",
+    "template": "policy_renewal.html"
+  },
+  {
+    "id": "security_training",
+    "name": "Annual Security Awareness Training",
+    "recipients": ["hr@example.com", "all-staff@example.com"],
+    "schedule": {"hour": 9, "minute": 0},
+    "days_before": [60, 30, 14],
+    "deadline": "2026-09-01",
+    "template": "policy_renewal.html"
+  }
+]

@@ -25,7 +25,7 @@ REMINDERS = load_reminders()
 
 st.set_page_config(
     page_title="Compliance Reminders",
-    page_icon="🛡️",
+    page_icon=":material/shield:",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -128,7 +128,7 @@ def send_reminder_email(reminder: dict, days: int) -> tuple[bool, str]:
     smtp_port = int(env_live.get("EMAIL_PORT", "587"))
     smtp_from = env_live.get("EMAIL_FROM", smtp_user)
     if not smtp_user or not smtp_pass:
-        return False, "SMTP credentials not configured. Go to ⚙️ Settings."
+        return False, "SMTP credentials not configured. Go to Settings."
     try:
         dl = date.fromisoformat(reminder["deadline"])
         html = render(
@@ -140,7 +140,7 @@ def send_reminder_email(reminder: dict, days: int) -> tuple[bool, str]:
             },
         )
         subject = (
-            f"⚠️ Reminder: {reminder['name']} – "
+            f"Reminder: {reminder['name']} – "
             f"{max(days, 0)} day{'s' if days != 1 else ''} remaining"
         )
         msg = MIMEMultipart("alternative")
@@ -174,12 +174,12 @@ def render_email_preview(reminder: dict) -> str:
 # ── Sidebar ──────────────────────────────────────────────────────────────────
 
 with st.sidebar:
-    st.markdown("## 🛡️ Compliance Reminders")
+    st.markdown("## Compliance Reminders")
     st.markdown("---")
 
     page = st.radio(
         "Navigation",
-        ["📊 Dashboard", "🔍 Dry Run", "📧 Email Preview", "⚙️ Settings", "📋 Manage Reminders"],
+        ["Dashboard", "Dry Run", "Email Preview", "Settings", "Manage Reminders"],
         label_visibility="collapsed",
     )
 
@@ -191,9 +191,9 @@ with st.sidebar:
 
     st.metric("Total Reminders", total)
     if overdue_count:
-        st.metric("🚨 Overdue", overdue_count)
+        st.metric("Overdue", overdue_count)
     if critical_count:
-        st.metric("⚠️ Critical (≤7d)", critical_count)
+        st.metric("Critical (≤7d)", critical_count)
 
     st.markdown("---")
     st.caption(f"Today: {date.today().strftime('%d %B %Y')}")
@@ -202,7 +202,7 @@ with st.sidebar:
 # ── Pages ─────────────────────────────────────────────────────────────────────
 
 # ── DASHBOARD ────────────────────────────────────────────────────────────────
-if page == "📊 Dashboard":
+if page == "Dashboard":
     st.title("Compliance Dashboard")
     st.caption("Live view of all scheduled compliance reminders.")
 
@@ -211,9 +211,9 @@ if page == "📊 Dashboard":
     soon_count = sum(1 for r in REMINDERS if 7 < days_remaining(r) <= 30)
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Total", total)
-    m2.metric("✅ OK", ok_count)
-    m3.metric("🟡 Soon (≤30d)", soon_count)
-    m4.metric("🔴 Critical / Overdue", critical_count + overdue_count)
+    m2.metric("OK", ok_count)
+    m3.metric("Soon (≤30d)", soon_count)
+    m4.metric("Critical / Overdue", critical_count + overdue_count)
 
     st.markdown("---")
 
@@ -254,16 +254,16 @@ if page == "📊 Dashboard":
                 progress = urgency_progress(dr)
                 color = "#ef4444" if dr <= 7 else "#f59e0b" if dr <= 30 else "#10b981"
                 st.progress(progress, text=f"{max(dr, 0)} days remaining")
-                if st.button("📤 Send Now", key=f"force_{reminder['id']}", help="Force-send this reminder email now"):
+                if st.button("Send Now", icon=":material/send:", key=f"force_{reminder['id']}", help="Force-send this reminder email now"):
                     ok, msg = send_reminder_email(reminder, dr)
                     if ok:
-                        st.success(f"✅ {msg}")
+                        st.success(msg)
                     else:
-                        st.warning(f"⚠️ {msg}")
+                        st.warning(msg)
 
 
 # ── DRY RUN ──────────────────────────────────────────────────────────────────
-elif page == "🔍 Dry Run":
+elif page == "Dry Run":
     st.title("Dry Run")
     st.caption("Simulate which reminders would fire on a given date — no emails sent.")
 
@@ -282,11 +282,11 @@ elif page == "🔍 Dry Run":
         deadline = date.fromisoformat(reminder["deadline"])
         dr_sim = (deadline - sim_date).days
 
-        icon = "🔔" if fires else "💤"
         status_text = f"**WOULD FIRE** — {dr_sim}d before deadline" if fires else f"No match — {dr_sim}d remaining"
         status_color = "#10b981" if fires else "#6b705c"
+        expander_label = f"► {reminder['name']}" if fires else reminder['name']
 
-        with st.expander(f"{icon} {reminder['name']}", expanded=fires):
+        with st.expander(expander_label, expanded=fires):
             c1, c2 = st.columns([2, 1])
             with c1:
                 st.markdown(
@@ -297,12 +297,12 @@ elif page == "🔍 Dry Run":
                 st.caption(f"Recipients: {', '.join(reminder['recipients'])}")
             with c2:
                 if fires:
-                    if st.button("📤 Send Now", key=f"dryrun_send_{reminder['id']}"):
+                    if st.button("Send Now", icon=":material/send:", key=f"dryrun_send_{reminder['id']}"):
                         ok, msg = send_reminder_email(reminder, dr_sim)
                         if ok:
-                            st.success(f"✅ {msg}")
+                            st.success(msg)
                         else:
-                            st.warning(f"⚠️ {msg}")
+                            st.warning(msg)
                 else:
                     st.info("Skipped")
 
@@ -317,7 +317,7 @@ elif page == "🔍 Dry Run":
 
 
 # ── EMAIL PREVIEW ────────────────────────────────────────────────────────────
-elif page == "📧 Email Preview":
+elif page == "Email Preview":
     st.title("Email Preview")
     st.caption("Render the email template for any reminder as it would appear to recipients.")
 
@@ -333,7 +333,7 @@ elif page == "📧 Email Preview":
 
     col_render, col_send = st.columns(2)
 
-    if col_render.button("👁️ Render Email", use_container_width=True):
+    if col_render.button("Render Email", icon=":material/visibility:", use_container_width=True):
         try:
             html = render_email_preview(reminder)
             st.markdown("#### Preview")
@@ -341,16 +341,16 @@ elif page == "📧 Email Preview":
         except Exception as e:
             st.error(f"Failed to render template: {e}")
 
-    if col_send.button("📤 Send Now", use_container_width=True):
+    if col_send.button("Send Now", icon=":material/send:", use_container_width=True):
         ok, msg_out = send_reminder_email(reminder, days_remaining(reminder))
         if ok:
-            st.success(f"✅ {msg_out}")
+            st.success(msg_out)
         else:
-            st.warning(f"⚠️ {msg_out}")
+            st.warning(msg_out)
 
 
 # ── SETTINGS ─────────────────────────────────────────────────────────────────
-elif page == "⚙️ Settings":
+elif page == "Settings":
     st.title("Settings")
     st.caption("Configure SMTP and application settings. Changes are saved to `.env`.")
 
@@ -383,7 +383,7 @@ elif page == "⚙️ Settings":
             index=["DEBUG", "INFO", "WARNING", "ERROR"].index(env_vals.get("LOG_LEVEL", "INFO")),
         )
 
-        submitted = st.form_submit_button("💾 Save Settings", type="primary")
+        submitted = st.form_submit_button("Save Settings", icon=":material/save:", type="primary")
 
     if submitted:
         if not ENV_FILE.exists():
@@ -395,7 +395,7 @@ elif page == "⚙️ Settings":
         set_key(str(ENV_FILE), "EMAIL_FROM", from_addr or user)
         set_key(str(ENV_FILE), "TIMEZONE", timezone)
         set_key(str(ENV_FILE), "LOG_LEVEL", log_level)
-        st.success("✅ Settings saved to .env")
+        st.success("Settings saved to .env")
 
     st.markdown("---")
     st.subheader("Reminder Definitions")
@@ -415,7 +415,7 @@ elif page == "⚙️ Settings":
 
 
 # ── MANAGE REMINDERS ─────────────────────────────────────────────────────────
-elif page == "📋 Manage Reminders":
+elif page == "Manage Reminders":
     st.title("Manage Reminders")
     st.caption("Add or remove compliance reminders. Changes are saved immediately to `reminders/reminders.json`.")
 
@@ -440,7 +440,7 @@ elif page == "📋 Manage Reminders":
         row[0].markdown(f"**{r['name']}**  \n`{r['id']}`")
         row[1].markdown(deadline_str)
         row[2].markdown(f"<span class='{pill}'>{label}</span>", unsafe_allow_html=True)
-        if row[3].button("🗑️", key=f"del_{r['id']}", help=f"Delete {r['name']}"):
+        if row[3].button("Delete", icon=":material/delete:", key=f"del_{r['id']}", help=f"Delete {r['name']}"):
             updated = [x for x in REMINDERS if x["id"] != r["id"]]
             save_reminders(updated)
             st.success(f"Deleted **{r['name']}**")
@@ -464,7 +464,7 @@ elif page == "📋 Manage Reminders":
         new_hour = c6.number_input("Schedule Hour (0–23)", min_value=0, max_value=23, value=8)
         new_minute = c7.number_input("Schedule Minute (0–59)", min_value=0, max_value=59, value=0)
 
-        submitted = st.form_submit_button("➕ Add Reminder", type="primary")
+        submitted = st.form_submit_button("Add Reminder", icon=":material/add:", type="primary")
 
     if submitted:
         if not new_name.strip() or not new_recipients.strip():
@@ -491,7 +491,7 @@ elif page == "📋 Manage Reminders":
                     "template": new_template,
                 }
                 save_reminders(REMINDERS + [new_reminder])
-                st.success(f"✅ Added **{new_name.strip()}**")
+                st.success(f"Added **{new_name.strip()}**")
                 st.rerun()
             except ValueError as e:
                 st.error(f"Invalid input: {e}")
